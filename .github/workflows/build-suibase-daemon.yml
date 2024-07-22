@@ -14,19 +14,19 @@ jobs:
       - name: Extract Version from Cargo.toml
         id: cargo_version
         run: |
-          VERSION=$(grep '^version' sui-binaries/triggers/suibase-daemon/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "::set-output name=VERSION::$VERSION"
+          suibase_cargo_version=$(grep '^version' sui-binaries/triggers/suibase-daemon/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "suibase_cargo_version=$VERSION" >> $GITHUB_ENV
 
       - name: Check if Release Exists
         id: check_release
-        uses: actions/github-script@v5
+        uses: actions/github-script@v7
         with:
           script: |
             const { data: releases } = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
-            const version = "${{ steps.cargo_version.outputs.VERSION }}";
+            const version = "${{ env.suibase_cargo_version }}";
             const releaseExists = releases.some(release => release.tag_name === `suibase-daemon-v${version}`);
             console.log(`Release exists: ${releaseExists}`);
             return releaseExists;
