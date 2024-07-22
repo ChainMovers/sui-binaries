@@ -1,0 +1,44 @@
+name: Build Suibase Daemon
+
+on:
+  push:
+    paths:
+      - "sui-binaries/triggers/suibase-daemon/Cargo.toml"
+      - ".github/workflows/build-suibase-daemon.yml"
+  workflow_dispatch:
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Version from Cargo.toml
+        id: cargo_version
+        run: |
+          VERSION=$(grep '^version' sui-binaries/triggers/suibase-daemon/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "::set-output name=VERSION::$VERSION"
+
+      - name: Check if Release Exists
+        id: check_release
+        uses: actions/github-script@v5
+        with:
+          script: |
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const version = "${{ steps.cargo_version.outputs.VERSION }}";
+            const releaseExists = releases.some(release => release.tag_name === `suibase-daemon-v${version}`);
+            console.log(`Release exists: ${releaseExists}`);
+            return releaseExists;
+          result-encoding: string
+
+      - name: Create Release if Not Exists
+        if: steps.check_release.outputs.result != 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: suibase-daemon-v${{ steps.cargo_version.outputs.VERSION }}
+          release_name: suibase-daemon-v${{ steps.cargo_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
