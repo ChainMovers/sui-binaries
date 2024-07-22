@@ -18,7 +18,8 @@ jobs:
         id: cargo_version
         run: |
           suibase_cargo_version=$(grep '^version' triggers/suibase-daemon/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "suibase_cargo_version=$VERSION" >> $GITHUB_ENV
+          echo "suibase_cargo_version=$suibase_cargo_version" >> $GITHUB_ENV
+          echo "Version: $suibase_cargo_version"
 
       - name: Check if Release Exists
         id: check_release
