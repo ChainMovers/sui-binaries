@@ -21,28 +21,122 @@ jobs:
           echo "suibase_cargo_version=$suibase_cargo_version" >> $GITHUB_ENV
           echo "Version: $suibase_cargo_version"
 
-      - name: Check if Release Exists
-        id: check_release
+      - name: Ensure Release and Get Upload URL
+        id: get_release_info
         uses: actions/github-script@v7
         with:
           script: |
+            const version = "${{ env.suibase_cargo_version }}";
+            const tagName = `suibase-daemon-v${version}`;
+            let uploadUrl;
+
+            // Check if the release already exists
             const { data: releases } = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
-            const version = "${{ env.suibase_cargo_version }}";
-            const releaseExists = releases.some(release => release.tag_name === `suibase-daemon-v${version}`);
-            console.log(`Release exists: ${releaseExists}`);
-            return releaseExists;
+            const release = releases.find(release => release.tag_name === tagName);
+
+            if (release) {
+              console.log(`Release already exists for ${tagName}.`);
+              uploadUrl = release.upload_url;
+            } else {
+              // Create the release if it does not exist
+              const response = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tagName,
+                name: `suibase-daemon-v${version}`,
+                draft: true,
+                prerelease: false,
+              });
+              console.log(`Release created for ${tagName}.`);
+              uploadUrl = response.data.upload_url;
+            }
+
+            return uploadUrl;
           result-encoding: string
 
-      - name: Create Release if Not Exists
-        if: steps.check_release.outputs.result != 'true'
-        uses: softprops/action-gh-release@v2
+    #      - name: Check if Release Exists
+    #        id: check_release
+    #        uses: actions/github-script@v7
+    #        with:
+    #          script: |
+    #            const { data: releases } = await github.rest.repos.listReleases({
+    #              owner: context.repo.owner,
+    #              repo: context.repo.repo,
+    #            });
+    #            const version = "${{ env.suibase_cargo_version }}";
+    #            const releaseExists = releases.some(release => release.tag_name === `suibase-daemon-v${version}`);
+    #            console.log(`Release exists: ${releaseExists}`);
+    #            return releaseExists;
+    #          result-encoding: string
+
+    #      - name: Create Release if Not Exists
+    #        if: steps.check_release.outputs.result != 'true'
+    #        uses: softprops/action-gh-release@v2
+    #        with:
+    #          tag_name: suibase-daemon-v${{ env.suibase_cargo_version }}
+    #          name: suibase-daemon-v${{ env.suibase_cargo_version }}
+    #          draft: true
+    #          prerelease: false
+    #        env:
+    #          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      suibase_cargo_version: ${{ env.suibase_cargo_version }}
+      upload_url: ${{ steps.get_release_info.outputs.result }}
+
+  build-assets:
+    needs: prepare-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-11]
+        include:
+          - os: ubuntu-latest
+            asset-name-suffix: ubuntu-x86_64
+          - os: macos-latest
+            asset-name-suffix: macos-x86_64
+          - os: macos-11
+            asset-name-suffix: macos-arm64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if Asset Exists
+        id: check_asset
+        uses: actions/github-script@v7
         with:
-          tag_name: suibase-daemon-v${{ env.suibase_cargo_version }}
-          name: suibase-daemon-v${{ env.suibase_cargo_version }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = "${{ needs.prepare-release.outputs.suibase_cargo_version }}";
+            const tagName = `suibase-daemon-v${version}`;
+            const assetName = `sui-daemon-v${version}-${{ matrix.asset-name-suffix }}.tgz`;
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const release = releases.find(release => release.tag_name === tagName);
+            const assetExists = release ? release.assets.some(asset => asset.name === assetName) : false;
+            console.log(`Asset exists for ${assetName}: ${assetExists}`);
+            if (assetExists) {
+              core.setOutput("skip", "true");
+            } else {
+              core.setOutput("skip", "false");
+            }
+          result-encoding: string
+
+      - name: Build Asset
+        if: steps.check_asset.outputs.skip == 'false'
+        run: |
+          # For now, just simulate the build and validation of the artifact.
+          echo "placeholder for build artifact" > suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz
+          echo "Asset built: suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz"
+
+      - name: Upload Asset to Release
+        if: steps.check_asset.outputs.skip == 'false'
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: ./suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz
+          asset_name: suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz
+          asset_content_type: application/gzip
