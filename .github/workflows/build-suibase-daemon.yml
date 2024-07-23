@@ -90,19 +90,24 @@ jobs:
             const version = "${{ needs.prepare-release.outputs.suibase_cargo_version }}";
             const tagName = `suibase-daemon-v${version}`;
             const assetName = `sui-daemon-v${version}-${{ matrix.asset-name-suffix }}.tgz`;
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const release = releases.find(release => release.tag_name === tagName);
-            const assetExists = release ? release.assets.some(asset => asset.name === assetName) : false;
-            console.log(`Asset exists for ${assetName}: ${assetExists}`);
+            let release;
+            try {
+               release = await github.rest.repos.getReleaseByTag({
+                 owner: context.repo.owner,
+                 repo: context.repo.repo,
+                 tag: tagName,
+               });
+            } catch (error) {
+               console.log(`getReleaseByTag info: ${error}`);
+               release = { data: { assets: [] } }; // Assume no release found
+            }
+            const assetExists = release.data.assets.some(asset => asset.name === assetName);
             if (assetExists) {
-              console.log(`Asset exists for ${assetName}: ${assetExists}. skip: true`);
-              core.setOutput("skip", "true");
+               console.log(`Asset exists for ${assetName}: ${assetExists}. skip: true`);
+               core.setOutput("skip", "true");
             } else {
-              console.log(`Asset does NOT exist for ${assetName}: ${assetExists}. skip: false`);
-              core.setOutput("skip", "false");
+               console.log(`Asset does NOT exist for ${assetName}: ${assetExists}. skip: false`);
+               core.setOutput("skip", "false");
             }
           result-encoding: string
 
