@@ -19,7 +19,7 @@ jobs:
         run: |
           suibase_cargo_version=$(grep '^version' triggers/suibase-daemon/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "suibase_cargo_version=$suibase_cargo_version" >> $GITHUB_ENV
-          echo "Version: $suibase_cargo_version"
+          echo "suibase_cargo_version: $suibase_cargo_version"
 
       - name: Ensure Release and Get Upload URL
         id: get_release_info
@@ -140,3 +140,49 @@ jobs:
           asset_path: ./suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz
           asset_name: suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz
           asset_content_type: application/gzip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-and-publish-release:
+    needs: build-assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Change Draft to Release when all assets present
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = "${{ needs.prepare-release.outputs.suibase_cargo_version }}";
+            const tagName = `suibase-daemon-v${version}`;
+            const expectedAssets = [
+              `sui-daemon-v${version}-ubuntu-x86_64.tgz`,
+              `sui-daemon-v${version}-macos-x86_64.tgz`,
+              `sui-daemon-v${version}-macos-arm64.tgz`
+            ];
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const release = releases.find(release => release.tag_name === tagName);
+            if (!release) {
+              throw new Error(`Release ${tagName} not found`);
+            }
+            const assetNames = release.assets.map(asset => asset.name);
+            const allAssetsPresent = expectedAssets.every(expectedAsset => assetNames.includes(expectedAsset));
+
+            if (allAssetsPresent) {
+              // Update the release to non-draft
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+                draft: false,
+              });
+              console.log(`Release ${tagName} published successfully.`);
+            } else {
+              console.log(`Not all expected assets are present for ${tagName}.`);
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
