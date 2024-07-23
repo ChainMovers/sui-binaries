@@ -21,7 +21,7 @@ jobs:
           echo "suibase_cargo_version=$suibase_cargo_version" >> $GITHUB_ENV
           echo "suibase_cargo_version: $suibase_cargo_version"
 
-      - name: Ensure Release and Get Upload URL
+      - name: Ensure Release exists and get upload URL
         id: get_release_info
         uses: actions/github-script@v7
         with:
@@ -50,8 +50,12 @@ jobs:
                 draft: true,
                 prerelease: false,
               });
-              console.log(`Release created for ${tagName}.`);
-              uploadUrl = response.data.upload_url;
+              if (response.status >= 200 && response.status < 300 && response.data.upload_url) {
+                console.log(`Release created for ${tagName}.`);
+                uploadUrl = response.data.upload_url;
+              } else {
+                throw new Error(`Failed to create release for ${tagName}. Status: ${response.status}`);
+              }
             }
 
             return uploadUrl;
@@ -94,8 +98,10 @@ jobs:
             const assetExists = release ? release.assets.some(asset => asset.name === assetName) : false;
             console.log(`Asset exists for ${assetName}: ${assetExists}`);
             if (assetExists) {
+              console.log(`Asset exists for ${assetName}: ${assetExists}. skip: true`);
               core.setOutput("skip", "true");
             } else {
+              console.log(`Asset does NOT exist for ${assetName}: ${assetExists}. skip: false`);
               core.setOutput("skip", "false");
             }
           result-encoding: string
@@ -179,7 +185,7 @@ jobs:
               });
               console.log(`Release ${tagName} published successfully.`);
             } else {
-              console.log(`Not all expected assets are present for ${tagName}.`);
+              throw new Error(`Not all expected assets are present for ${tagName}.`);
             }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
