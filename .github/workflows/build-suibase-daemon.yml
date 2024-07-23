@@ -57,31 +57,6 @@ jobs:
             return uploadUrl;
           result-encoding: string
 
-    #      - name: Check if Release Exists
-    #        id: check_release
-    #        uses: actions/github-script@v7
-    #        with:
-    #          script: |
-    #            const { data: releases } = await github.rest.repos.listReleases({
-    #              owner: context.repo.owner,
-    #              repo: context.repo.repo,
-    #            });
-    #            const version = "${{ env.suibase_cargo_version }}";
-    #            const releaseExists = releases.some(release => release.tag_name === `suibase-daemon-v${version}`);
-    #            console.log(`Release exists: ${releaseExists}`);
-    #            return releaseExists;
-    #          result-encoding: string
-
-    #      - name: Create Release if Not Exists
-    #        if: steps.check_release.outputs.result != 'true'
-    #        uses: softprops/action-gh-release@v2
-    #        with:
-    #          tag_name: suibase-daemon-v${{ env.suibase_cargo_version }}
-    #          name: suibase-daemon-v${{ env.suibase_cargo_version }}
-    #          draft: true
-    #          prerelease: false
-    #        env:
-    #          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       suibase_cargo_version: ${{ env.suibase_cargo_version }}
       upload_url: ${{ steps.get_release_info.outputs.result }}
@@ -91,14 +66,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-11]
+        os: [ubuntu-latest, macos-latest, macos-13]
         include:
           - os: ubuntu-latest
             asset-name-suffix: ubuntu-x86_64
           - os: macos-latest
-            asset-name-suffix: macos-x86_64
-          - os: macos-11
             asset-name-suffix: macos-arm64
+          - os: macos-13
+            asset-name-suffix: macos-x86_64
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -134,12 +109,34 @@ jobs:
 
       - name: Upload Asset to Release
         if: steps.check_asset.outputs.skip == 'false'
-        uses: actions/upload-release-asset@v1
+        uses: actions/github-script@v7
         with:
-          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
-          asset_path: ./suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz
-          asset_name: suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz
-          asset_content_type: application/gzip
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const assetPath = './suibase-daemon-v${{ needs.prepare-release.outputs.suibase_cargo_version }}-${{ matrix.asset-name-suffix }}.tgz';
+            const assetName = path.basename(assetPath);
+            const uploadUrl = '${{ needs.prepare-release.outputs.upload_url }}';
+            const contentType = 'application/gzip';
+            const contentLength = fs.statSync(assetPath).size;
+
+            const headers = {
+              'content-type': contentType,
+              'content-length': contentLength,
+            };
+
+            const uploadAssetResponse = await github.rest.repos.uploadReleaseAsset({
+              url: uploadUrl,
+              headers,
+              name: assetName,
+              data: fs.readFileSync(assetPath),
+            });
+
+            if (uploadAssetResponse.status !== 201) {
+              throw new Error(`Failed to upload ${assetName}: ${uploadAssetResponse.status}`);
+            }
+
+            console.log(`Uploaded ${assetName} successfully.`);
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
