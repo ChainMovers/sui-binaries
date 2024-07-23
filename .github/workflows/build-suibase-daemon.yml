@@ -184,7 +184,7 @@ jobs:
               return;
             }
 
-            const assetExists = release.data.assets.some(asset => asset.name === asset_name);
+            const assetExists = release.assets.some(asset => asset.name === asset_name);
             if (!assetExists) {
                console.log(`Build needed for [${asset_name}]`);
                core.setOutput("do_build", "true");
@@ -230,7 +230,8 @@ jobs:
             });
 
             if (uploadAssetResponse.status !== 201) {
-              throw new Error(`Failed to upload ${asset_name}: ${uploadAssetResponse.status}`);
+              core.setFailed(`Failed to upload ${asset_name}: ${uploadAssetResponse.status}`);
+              return;
             }
 
             console.log(`Uploaded ${asset_name} successfully.`);
@@ -260,7 +261,8 @@ jobs:
             });
             const release = releases.find(release => release.tag_name === tag_name);
             if (!release) {
-              throw new Error(`Release ${tag_name} not found`);
+              core.setFailed(`Release ${tag_name} not found`);
+              return;
             }
             const asset_names = release.assets.map(asset => asset.name);
             const allAssetsPresent = expectedAssets.every(expectedAsset => asset_names.includes(expectedAsset));
@@ -273,9 +275,10 @@ jobs:
                 release_id: release.id,
                 draft: false,
               });
-              console.log(`Release ${tag_name} published successfully.`);
+              console.log(`Release ${tag_name} published successfully`);
             } else {
-              throw new Error(`Not all expected assets are present for ${tag_name}.`);
+              core.setFailed(`Not all expected assets are present for ${tag_name}`);
+              return;
             }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
