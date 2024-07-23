@@ -209,7 +209,6 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            const tag_name = "${{ needs.prepare-release.outputs.tag_name }}";
             const asset_name = "${{ steps.asset_vars.outputs.asset_name }}";
             const upload_url = "${{ needs.prepare-release.outputs.upload_url }}";
 
@@ -239,7 +238,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   verify-and-publish-release:
-    needs: build-assets
+    needs: [prepare-release, build-assets]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -261,7 +260,7 @@ jobs:
             });
             const release = releases.find(release => release.tag_name === tag_name);
             if (!release) {
-              core.setFailed(`Release ${tag_name} not found`);
+              core.setFailed(`Release [${tag_name}] not found`);
               return;
             }
             const asset_names = release.assets.map(asset => asset.name);
