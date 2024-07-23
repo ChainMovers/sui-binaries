@@ -51,7 +51,7 @@ jobs:
             const release = releases.find(release => release.tag_name === tag_name);
 
             if (release) {
-              console.log(`Release already exists for ${tag_name}.`);
+              console.log(`Release already exists for [${tag_name}]`);
               upload_url = release.upload_url;
             } else {
               // Create the release if it does not exist
@@ -60,14 +60,14 @@ jobs:
                 repo: context.repo.repo,
                 tag_name: tag_name,
                 name: tag_name,
-                draft: true,
+                draft: false,
                 prerelease: false,
               });
               if (response.status >= 200 && response.status < 300 && response.data.upload_url) {
-                console.log(`Release created for ${tag_name}.`);
+                console.log(`Release created for [${tag_name}]`);
                 upload_url = response.data.upload_url;
               } else {
-                throw new Error(`Failed to create release for ${tag_name}. Status: ${response.status}`);
+                throw new Error(`Failed to create release for [${tag_name}] Status: ${response.status}`);
               }
             }
             core.setOutput("upload_url", upload_url);
