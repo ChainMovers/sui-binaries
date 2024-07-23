@@ -210,10 +210,10 @@ jobs:
             const path = require('path');
 
             const tag_name = "${{ needs.prepare-release.outputs.tag_name }}";
-            const asset_name = `${{ steps.asset_vars.outputs.asset_name }}`;
-            const upload_url = '${{ needs.prepare-release.outputs.upload_url }}';
+            const asset_name = "${{ steps.asset_vars.outputs.asset_name }}";
+            const upload_url = "${{ needs.prepare-release.outputs.upload_url }}";
 
-            const assetPath = './${asset_name}';
+            const assetPath = `./${asset_name}`;
             const contentType = 'application/gzip';
             const contentLength = fs.statSync(assetPath).size;
 
