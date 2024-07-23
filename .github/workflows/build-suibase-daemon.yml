@@ -39,17 +39,16 @@ jobs:
         id: ensure_tag
         with:
           script: |
-            const tagName = "${{ env.tag_name }}";
-            console.log(`Ensuring tag exists: ${tagName}`);
+            const tag_name = "${{ env.tag_name }}";
 
             // Attempt to get the tag to see if it already exists
             try {
               await github.rest.git.getRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                ref: `tags/${tagName}`,
+                ref: `tags/${tag_name}`,
               });
-              console.log(`Tag ${tagName} already exists.`);
+              console.log(`Tag [${tag_name}] already exists.`);
             } catch (error) {
               if (error.status === 404) {
                 // Tag does not exist, so create it
@@ -61,33 +60,33 @@ jobs:
                     ref: 'heads/main', // Replace 'main' with your default branch if different
                   });
                   sha = commitResponse.data.sha;
-                } catch (commitError) {
-                  console.error(`Failed to fetch latest commit SHA:`, commitError);
-                  throw commitError;
+                } catch (error) {
+                  core.setFailed(`Error getting commit SHA: ${error}`);
+                  return;
                 }
 
                 try {
                   const createRefResponse = await github.rest.git.createRef({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    ref: `refs/tags/${tagName}`,
+                    ref: `refs/tags/${tag_name}`,
                     sha: sha,
                   });
 
                   // Check if the tag creation was successful
                   if (createRefResponse.status >= 200 && createRefResponse.status < 300) {
-                    console.log(`Tag ${tagName} created successfully.`);
+                    console.log(`Tag [${tag_name}] created successfully.`);
                   } else {
-                    console.error(`Failed to create tag ${tagName}. Status: ${createRefResponse.status}`);
-                    throw new Error(`Failed to create tag ${tagName}.`);
+                    core.setFailed(`Failed to create tag [${tag_name}]. Response: ${createRefResponse.status}`);
+                    return;
                   }
                 } catch (createRefError) {
-                  console.error(`Failed to create tag ${tagName}:`, createRefError);
-                  throw createRefError;
+                  core.setFailed(`Failed to create tag [${tag_name}]. ${createRefError}`);
+                  return;
                 }
               } else {
-                console.error(`Failed to check or create tag ${tagName}:`, error);
-                throw error;
+                core.setFailed(`Failed to getRef for tag [${tag_name}]. ${error}`);
+                return;
               }
             }
 
@@ -100,33 +99,40 @@ jobs:
             console.log(`tag_name: ${tag_name}`);
             let upload_url;
 
-            // Check if the release already exists
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const release = releases.find(release => release.tag_name === tag_name);
-
-            if (release) {
-              console.log(`Release already exists for [${tag_name}]`);
-              upload_url = release.upload_url;
-            } else {
-              // Create the release if it does not exist
-              const response = await github.rest.repos.createRelease({
+            try {
+              // Check if the release already exists
+              const { data: releases } = await github.rest.repos.listReleases({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                tag_name: tag_name,
-                name: tag_name,
-                draft: true,
-                prerelease: false,
               });
-              if (response.status >= 200 && response.status < 300 && response.data.upload_url) {
-                console.log(`Release created for [${tag_name}]`);
-                upload_url = response.data.upload_url;
+              const release = releases.find(release => release.tag_name === tag_name);
+
+              if (release) {
+                console.log(`Release already exists for [${tag_name}]`);
+                upload_url = release.upload_url;
               } else {
-                throw new Error(`Failed to create release for [${tag_name}] Status: ${response.status}`);
+                // Release does not exists, so create it.
+                const response = await github.rest.repos.createRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag_name: tag_name,
+                  name: tag_name,
+                  draft: true,
+                  prerelease: false,
+                });
+                if (response.status >= 200 && response.status < 300 && response.data.upload_url) {
+                  console.log(`Release created with tag [${tag_name}]`);
+                  upload_url = response.data.upload_url;
+                } else {
+                  core.setFailed(`Failed to create release with tag [${tag_name}] Status: ${response.status}`);
+                  return;
+                }
               }
+            } catch (error) {
+              core.setFailed(`Error while listing or creating releases: ${error.message}`);
+              return;
             }
+
             core.setOutput("upload_url", upload_url);
 
     outputs:
@@ -172,18 +178,18 @@ jobs:
               return;
             }
 
-            const release = releases.data.find(release => release.tag_name === tagName);
+            const release = releases.data.find(release => release.tag_name === tag_name);
             if (!release) {
-              core.setFailed(`Release tag not found [${tagName}]: ${error.message}`);
+              core.setFailed(`Release tag not found [${tag_name}]: ${error.message}`);
               return;
             }
 
             const assetExists = release.data.assets.some(asset => asset.name === asset_name);
             if (!assetExists) {
-               console.log(`Build needed for ${asset_name}`);
+               console.log(`Build needed for [${asset_name}]`);
                core.setOutput("do_build", "true");
             } else {
-               console.log(`No build needed for ${asset_name}`);
+               console.log(`No build needed for [${asset_name}]`);
                core.setOutput("do_build", "false");
             }
 
@@ -207,7 +213,7 @@ jobs:
             const asset_name = `${{ steps.asset_vars.outputs.asset_name }}`;
             const upload_url = '${{ needs.prepare-release.outputs.upload_url }}';
 
-            const assetPath = './$asset_name';
+            const assetPath = './${asset_name}';
             const contentType = 'application/gzip';
             const contentLength = fs.statSync(assetPath).size;
 
