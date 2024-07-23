@@ -161,24 +161,30 @@ jobs:
             const asset_name = `${tag_name}-${{ matrix.asset-name-suffix }}.tgz`;
             core.setOutput("asset_name", asset_name);
 
-            let release;
+            let releases;
             try {
-               release = await github.rest.repos.getReleaseByTag({
-                 owner: context.repo.owner,
-                 repo: context.repo.repo,
-                 tag: tag_name,
-               });
+              releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
             } catch (error) {
-               console.log(`getReleaseByTag info: ${error}`);
-               release = { data: { assets: [] } }; // Assume no release found
+              core.setFailed(`Error fetching releases: ${error}`);
+              return;
             }
+
+            const release = releases.data.find(release => release.tag_name === tagName);
+            if (!release) {
+              core.setFailed(`Release tag not found [${tagName}]: ${error.message}`);
+              return;
+            }
+
             const assetExists = release.data.assets.some(asset => asset.name === asset_name);
-            if (assetExists) {
-               console.log(`No build needed for ${asset_name}`);
-               core.setOutput("do_build", "false");
-            } else {
+            if (!assetExists) {
                console.log(`Build needed for ${asset_name}`);
                core.setOutput("do_build", "true");
+            } else {
+               console.log(`No build needed for ${asset_name}`);
+               core.setOutput("do_build", "false");
             }
 
       - name: Build Asset
