@@ -250,7 +250,12 @@ jobs:
           # Build the archive
           cd $HOME
           tar -czf $asset_name -C $HOME suibase/workdirs/common/bin/suibase-daemon
-          # TODO Final check for decompression+execution of the asset.
+
+          # Verify that the asset is indeed located in $HOME.
+          if [ ! -f $HOME/$asset_name ]; then
+            echo "Asset not built: $asset_name"
+            exit 1
+          fi
           echo "Asset built: $asset_name"
 
       - name: Upload Asset to Release
@@ -264,7 +269,7 @@ jobs:
             const asset_name = "${{ steps.asset_vars.outputs.asset_name }}";
             const upload_url = "${{ needs.prepare-release.outputs.upload_url }}";
 
-            const assetPath = `./${asset_name}`;
+            const assetPath = path.join(process.env.HOME, asset_name);
             const contentType = 'application/gzip';
             const contentLength = fs.statSync(assetPath).size;
 
