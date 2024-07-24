@@ -193,12 +193,65 @@ jobs:
                core.setOutput("do_build", "false");
             }
 
-      - name: Build Asset
+      - name: Free Disk Space (Ubuntu)
+        if: steps.asset_vars.outputs.do_build == 'true' && runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # 'true' means remove...
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false # Not sure if needed for heavy link... keep it for now.
+
+      - name: Install Rust Toolchain
+        if: steps.asset_vars.outputs.do_build == 'true'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: "false" # Control cache in "Rust Caching" step instead.
+
+      - name: Sui Prerequesites (Ubuntu)
+        if: steps.asset_vars.outputs.do_build == 'true' && runner.os == 'Linux'
+        run: |
+          sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential
+
+      - name: Sui Prerequesites (macOS)
+        if: steps.asset_vars.outputs.do_build == 'true' && runner.os == 'macOS'
+        run: |
+          brew install curl cmake
+
+      - name: Prepare Suibase environment
         if: steps.asset_vars.outputs.do_build == 'true'
         run: |
-          # For now, just simulate the build and validation of the artifact.
+          git clone https://github.com/ChainMovers/suibase.git $HOME/suibase
+          $HOME/suibase/install
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build asset
+        if: steps.asset_vars.outputs.do_build == 'true'
+        run: |
           asset_name="${{ steps.asset_vars.outputs.asset_name }}"
-          echo "placeholder for build artifact" > $asset_name
+          cargo_version="${{ needs.prepare-release.outputs.cargo_version }}"
+
+          $HOME/suibase/update-daemon
+          if [ ! -f $HOME/suibase/workdirs/common/bin/suibase-daemon ]; then
+            echo "suibase-daemon not found"
+            exit 1
+          fi
+
+          # Sanity test that the binary version is as expected.
+          version=$($HOME/suibase/workdirs/common/bin/suibase-daemon --version)
+          if [[ $version != *$cargo_version ]]; then
+            echo "Version mismatch: $version != $cargo_version"
+            exit 1
+          fi
+
+          # Build the archive
+          cd $HOME
+          tar -czf $asset_name -C $HOME suibase/workdirs/common/bin/suibase-daemon
+          # TODO Final check for decompression+execution of the asset.
           echo "Asset built: $asset_name"
 
       - name: Upload Asset to Release
