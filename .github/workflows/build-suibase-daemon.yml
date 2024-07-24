@@ -234,7 +234,6 @@ jobs:
         run: |
           asset_name="${{ steps.asset_vars.outputs.asset_name }}"
           cargo_version="${{ needs.prepare-release.outputs.cargo_version }}"
-          testnet create
           $HOME/suibase/update-daemon
           if [ ! -f $HOME/suibase/workdirs/common/bin/suibase-daemon ]; then
             echo "suibase-daemon not found"
