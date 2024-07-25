@@ -193,18 +193,18 @@ jobs:
                core.setOutput("do_build", "false");
             }
 
-      - name: Free Disk Space (Ubuntu)
-        if: steps.asset_vars.outputs.do_build == 'true' && runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # 'true' means remove...
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false # Not sure if needed for heavy link... keep it for now.
+      #- name: Free Disk Space (Ubuntu)
+      #  if: steps.asset_vars.outputs.do_build == 'true' && runner.os == 'Linux'
+      #  uses: jlumbroso/free-disk-space@main
+      #  with:
+      # 'true' means remove...
+      #    tool-cache: true
+      #    android: true
+      #    dotnet: true
+      #    haskell: true
+      #    large-packages: true
+      #    docker-images: true
+      #    swap-storage: false # Not sure if needed for heavy link... keep it for now.
 
       - name: Install Rust Toolchain
         if: steps.asset_vars.outputs.do_build == 'true'
@@ -212,22 +212,31 @@ jobs:
         with:
           cache: "false" # Control cache in "Rust Caching" step instead.
 
-      - name: Sui Prerequesites (Ubuntu)
-        if: steps.asset_vars.outputs.do_build == 'true' && runner.os == 'Linux'
-        run: |
-          sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential
-
-      - name: Sui Prerequesites (macOS)
-        if: steps.asset_vars.outputs.do_build == 'true' && runner.os == 'macOS'
-        run: |
-          brew install curl cmake
-
-      - name: Prepare Suibase environment
+      - name: Sui Prerequisites
         if: steps.asset_vars.outputs.do_build == 'true'
         run: |
-          git clone https://github.com/ChainMovers/suibase.git $HOME/suibase
-          $HOME/suibase/install
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential
+            echo Installed Linux dependencies
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install curl cmake
+            echo Installed macOS dependencies
+          else
+            echo "Unsupported OS: $RUNNER_OS"
+            exit 1
+          fi
+
+      - name: Download Suibase and add to $PATH
+        if: steps.asset_vars.outputs.do_build == 'true'
+        run: |
+          mkdir -p $HOME/.local/bin
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          git clone https://github.com/ChainMovers/suibase.git $HOME/suibase
+
+      - name: Install Suibase
+        if: steps.asset_vars.outputs.do_build == 'true'
+        run: |
+          $HOME/suibase/install
 
       - name: Build asset
         if: steps.asset_vars.outputs.do_build == 'true'
