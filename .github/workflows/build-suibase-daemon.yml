@@ -243,7 +243,9 @@ jobs:
         run: |
           asset_name="${{ steps.asset_vars.outputs.asset_name }}"
           cargo_version="${{ needs.prepare-release.outputs.cargo_version }}"
-          $HOME/suibase/update-daemon
+          # Don't care about the exit code of update-daemon. What is important
+          # is if the binary was built or not.
+          $HOME/suibase/update-daemon || true
           if [ ! -f $HOME/suibase/workdirs/common/bin/suibase-daemon ]; then
             echo "suibase-daemon not found"
             exit 1
@@ -274,11 +276,29 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
+            const { execSync } = require('child_process');
 
             const asset_name = "${{ steps.asset_vars.outputs.asset_name }}";
             const upload_url = "${{ needs.prepare-release.outputs.upload_url }}";
+            const cargo_version = "${{ needs.prepare-release.outputs.cargo_version }}";
 
             const assetPath = path.join(process.env.HOME, asset_name);
+            const tempDir = fs.mkdtempSync(path.join(process.env.HOME, 'temp-'));
+
+            // Decompress the asset into the temporary directory
+            execSync(`tar -xzf ${assetPath} -C ${tempDir}`);
+
+            // Run the asset with "--version" parameter
+            const binaryPath = path.join(tempDir, 'suibase/workdirs/common/bin/suibase-daemon');
+            const versionOutput = execSync(`${binaryPath} --version`).toString().trim();
+
+            // Check if the version matches cargo_version
+            if (!versionOutput.endsWith(cargo_version)) {
+              core.setFailed(`Version mismatch: ${versionOutput} != ${cargo_version}`);
+              return;
+            }
+
+            // All good. Upload the asset.
             const contentType = 'application/gzip';
             const contentLength = fs.statSync(assetPath).size;
 
