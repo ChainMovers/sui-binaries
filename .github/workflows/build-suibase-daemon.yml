@@ -3,7 +3,7 @@ name: Build Suibase Daemon
 on:
   push:
     paths:
-      - "sui-binaries/triggers/suibase-daemon/Cargo.toml"
+      - "triggers/suibase-daemon/Cargo.toml"
       - ".github/workflows/build-suibase-daemon.yml"
   workflow_dispatch:
 
