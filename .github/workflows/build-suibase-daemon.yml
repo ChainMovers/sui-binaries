@@ -231,7 +231,7 @@ jobs:
         run: |
           mkdir -p $HOME/.local/bin
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          git clone https://github.com/ChainMovers/suibase.git $HOME/suibase
+          git clone --branch dev https://github.com/ChainMovers/suibase.git $HOME/suibase
 
       - name: Install Suibase
         if: steps.asset_vars.outputs.do_build == 'true'
