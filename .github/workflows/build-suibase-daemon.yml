@@ -245,7 +245,7 @@ jobs:
           cargo_version="${{ needs.prepare-release.outputs.cargo_version }}"
           # Don't care about the exit code of update-daemon. What is important
           # is if the binary was built or not.
-          $HOME/suibase/update-daemon || true
+          $HOME/suibase/scripts/dev/update-daemon || true
           if [ ! -f $HOME/suibase/workdirs/common/bin/suibase-daemon ]; then
             echo "suibase-daemon not found"
             exit 1
