@@ -215,7 +215,7 @@ jobs:
           # Set binary path based on OS
           if [ "${{ runner.os }}" == "Windows" ]; then
               # For Windows, use native paths for file operations
-              DOWNLOAD_URL="https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }}"
+              DOWNLOAD_URL="https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }}.exe"
               BINARY_PATH="${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
 
               echo "Downloading $DOWNLOAD_URL to $BINARY_PATH"
@@ -225,7 +225,9 @@ jobs:
               # No need to chmod on Windows
           else
               # For Linux/macOS
-              curl -L "https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }}" -o "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
+              DOWNLOAD_URL="https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }}"
+              BINARY_PATH="${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
+              curl -L "$DOWNLOAD_URL" -o "$BINARY_PATH"
               chmod +x "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
           fi
 
