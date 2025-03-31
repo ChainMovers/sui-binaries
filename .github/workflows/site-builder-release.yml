@@ -1,0 +1,302 @@
+# This workflow runs 4 times a day (and dispatch).
+#
+#  (1) Download https://storage.googleapis.com/mysten-walrus-binaries/site-builder-$NETWORK-latest-$SYSTEM -o site-builder
+#      (where $NETWORK is an input parameter to the workflow)
+#
+#  (2) Run "site-builder --version" to extract the "vx.y.z" string version (site-builder.exe when windows).
+#
+#  (3) If a newer version is found, then create a draft release named as follow:
+#       "site-builder-$NETWORK-vx.y.z"
+#
+#  (4) Check if "site-builder-$NETWORK-vx.y.z" has an asset named "site-builder-$NETWORK-vx.y.z-$SYSTEM.tgz"
+#      if not, package (tgz) the site-builder binary and upload it as an asset.
+#
+#  (5) Repeat step 1 to 4 for $SYSTEM being:
+#        "ubuntu-x86_64"
+#        "macos-arm64"
+#        "macos-x86_64"
+#        "windows-x86_64"
+#      Take note that these must be run on different OS/github runners.
+#
+#  (6) Once all expected $SYSTEM binaries are uploaded, then promote the draft release
+#      to an official release.
+#
+name: Site Builder Common Logic
+
+on:
+  workflow_call:
+    inputs:
+      network:
+        required: true
+        type: string
+        description: "Network type (mainnet or testnet)"
+
+jobs:
+  # Download latest site-builder to identify latest version
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version_check.outputs.version }}
+      has_new_version: ${{ steps.version_check.outputs.has_new_version }}
+      should_build_assets: ${{ steps.version_check.outputs.should_build_assets }}
+      upload_url: ${{ steps.create_or_get_release.outputs.result.upload_url }}
+      release_tag: ${{ steps.version_check.outputs.release_tag }}
+      release_id: ${{ steps.create_or_get_release.outputs.result.release_id }}
+
+    steps:
+      - name: Download latest site-builder (ubuntu)
+        run: |
+          mkdir -p ${{ runner.temp }}/site-builder
+          curl -L https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-ubuntu-x86_64 -o ${{ runner.temp }}/site-builder/site-builder
+          chmod +x ${{ runner.temp }}/site-builder/site-builder
+
+      - name: Check version and existing releases
+        id: version_check
+        run: |
+          version=$(${{ runner.temp }}/site-builder/site-builder --version | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
+          echo "Version detected: $version"
+          release_tag="site-builder-${{ inputs.network }}-$version"
+          echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+          # Check if release already exists
+          if gh release view "$release_tag" &>/dev/null; then
+            is_draft=$(gh release view "$release_tag" --json isDraft -q '.isDraft')
+            if [ "$is_draft" = "true" ]; then
+              echo "Found existing draft release: $release_tag"
+              echo "has_new_version=false" >> $GITHUB_OUTPUT
+              # We should still build assets for draft releases
+              echo "should_build_assets=true" >> $GITHUB_OUTPUT
+            else
+              echo "Release $release_tag already exists and is published"
+              echo "has_new_version=false" >> $GITHUB_OUTPUT
+              echo "should_build_assets=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "New version detected: $version"
+            echo "has_new_version=true" >> $GITHUB_OUTPUT
+            echo "should_build_assets=true" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get release info (create as needed)
+        id: create_or_get_release
+        if: steps.version_check.outputs.should_build_assets == 'true'
+        uses: actions/github-script@v7
+        with:
+          result-encoding: json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const releaseTag = "${{ steps.version_check.outputs.release_tag }}";
+
+            try {
+              // First check if the release exists
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+
+              const existingRelease = releases.data.find(r => r.tag_name === releaseTag);
+
+              if (existingRelease) {
+                console.log(`Found existing release with ID: ${existingRelease.id}`);
+                return {
+                  upload_url: existingRelease.upload_url,
+                  release_id: existingRelease.id
+                };
+              }
+
+              // Create new release if it doesn't exist
+              console.log(`Creating draft release: ${releaseTag}`);
+              const response = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: releaseTag,
+                name: releaseTag,
+                draft: true,
+                prerelease: false,
+                generate_release_notes: true
+              });
+
+              console.log(`Draft release created with ID: ${response.data.id}`);
+              return {
+                upload_url: response.data.upload_url,
+                release_id: response.data.id
+              };
+            } catch (error) {
+              console.error(`Error with release: ${error.message}`);
+              core.setFailed(error.message);
+              return { upload_url: '', release_id: '' };
+            }
+  build-assets:
+    needs: check-version
+    if: ${{ needs.check-version.outputs.should_build_assets == 'true' }}
+    runs-on: ${{ matrix.system.os }}
+    env:
+      ASSET_NAME: site-builder-${{ inputs.network }}-${{ needs.check-version.outputs.version }}-${{ matrix.system.name }}.tgz
+    strategy:
+      matrix:
+        system:
+          - { os: ubuntu-latest, name: ubuntu-x86_64 }
+          - { os: macos-latest, name: macos-x86_64 }
+          - { os: macos-latest, name: macos-arm64 }
+          - { os: windows-latest, name: windows-x86_64 }
+      fail-fast: false
+
+    steps:
+      - name: Check if asset already exists
+        id: check_asset
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const releaseTag = process.env.RELEASE_TAG;
+            const assetName = process.env.ASSET_NAME;
+
+            try {
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+
+              const release = releases.data.find(r => r.tag_name === releaseTag);
+              if (!release) {
+                console.log(`Release ${releaseTag} not found`);
+                return { exists: false };
+              }
+
+              const assetExists = release.assets.some(asset => asset.name === assetName);
+              if (assetExists) {
+                console.log(`Asset ${assetName} already exists in release ${releaseTag}`);
+                return { exists: true };
+              } else {
+                console.log(`Asset ${assetName} does not exist in release ${releaseTag}`);
+                return { exists: false };
+              }
+            } catch (error) {
+              console.error(`Error checking assets: ${error.message}`);
+              return { exists: false };
+            }
+
+      - name: Download site-builder binary
+        if: fromJSON(steps.check_asset.outputs.result).exists == false
+        run: |
+          mkdir -p ${{ runner.temp }}/site-builder
+          curl -L https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }} -o ${{ runner.temp }}/site-builder/site-builder${{ runner.os == 'Windows' && '.exe' || '' }}
+          chmod +x ${{ runner.temp }}/site-builder/site-builder${{ runner.os == 'Windows' && '.exe' || '' }}
+        shell: bash
+
+      - name: Sanity check version
+        if: fromJSON(steps.check_asset.outputs.result).exists == false
+        run: |
+          detected_version=$(${{ runner.temp }}/site-builder/site-builder${{ runner.os == 'Windows' && '.exe' || '' }} --version | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
+          if [ "$detected_version" != "${{ needs.check-version.outputs.version }}" ]; then
+          echo "Version mismatch: expected ${{ needs.check-version.outputs.version }} but got $detected_version"
+          exit 1
+          fi
+          echo "Version verified: $detected_version"
+        shell: bash
+
+      - name: Package binary
+        if: fromJSON(steps.check_asset.outputs.result).exists == false
+        run: |
+          cd ${{ runner.temp }}/site-builder
+          tar -czf ${{ env.ASSET_NAME }} site-builder${{ runner.os == 'Windows' && '.exe' || '' }}
+        shell: bash
+
+      - name: Upload Asset
+        if: fromJSON(steps.check_asset.outputs.result).exists == false
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const assetPath = path.join('${{ runner.temp }}', 'site-builder', '${{ env.ASSET_NAME }}');
+            const assetName = process.env.ASSET_NAME;
+            const uploadUrl = process.env.UPLOAD_URL;
+
+            const stats = fs.statSync(assetPath);
+
+            console.log(`Uploading ${assetPath} (${stats.size} bytes) to ${uploadUrl}`);
+
+            try {
+              const uploadResponse = await github.rest.repos.uploadReleaseAsset({
+                url: uploadUrl,
+                headers: {
+                  'content-type': 'application/gzip',
+                  'content-length': stats.size
+                },
+                name: assetName,
+                data: fs.readFileSync(assetPath)
+              });
+
+              console.log(`Asset uploaded successfully: ${uploadResponse.data.browser_download_url}`);
+            } catch (error) {
+              console.error(`Error uploading asset: ${error.message}`);
+              core.setFailed(error.message);
+            }
+
+  publish-release:
+    needs: [check-version, build-assets]
+    if: ${{ needs.check-version.outputs.has_new_version == 'true' && always() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify all assets and publish release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const releaseTag = "${{ needs.check-version.outputs.release_tag }}";
+            const expectedSystems = [
+              'ubuntu-x86_64',
+              'macos-arm64',
+              'macos-x86_64',
+              'windows-x86_64'
+            ];
+
+            try {
+              // Get the release
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+
+              const release = releases.data.find(r => r.tag_name === releaseTag);
+              if (!release) {
+                console.error(`Release ${releaseTag} not found`);
+                core.setFailed(`Release ${releaseTag} not found`);
+                return;
+              }
+
+              // Check for all required assets
+              const version = "${{ needs.check-version.outputs.version }}";
+              const network = "${{ inputs.network }}";
+              const expectedAssets = expectedSystems.map(system =>
+                `site-builder-${network}-${version}-${system}.tgz`
+              );
+
+              const missingAssets = expectedAssets.filter(expectedAsset =>
+                !release.assets.some(asset => asset.name === expectedAsset)
+              );
+
+              if (missingAssets.length > 0) {
+                console.log(`Release ${releaseTag} is missing these assets: ${missingAssets.join(', ')}`);
+                console.log('Not publishing release yet. Waiting for all assets to be uploaded.');
+                return;
+              }
+
+              // All assets are present, publish the release
+              console.log(`All required assets found for ${releaseTag}. Publishing release.`);
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+                draft: false
+              });
+
+              console.log(`Release ${releaseTag} has been published successfully!`);
+            } catch (error) {
+              console.error(`Error publishing release: ${error.message}`);
+              core.setFailed(error.message);
+            }
