@@ -409,11 +409,15 @@ jobs:
                 return;
               }
 
+              // release.id is a number, so make releaseId to be same type (else !== will fail)
+              const numericReleaseId = parseInt(releaseId, 10);
+
               // Sanity test that release.id matches the one identified
               // ealier in the workflow.
-              if (release.id !== releaseId) {
-                console.error(`Release ID mismatch: expected ${releaseId} but got ${release.id}`);
-                core.setFailed(`Release ID mismatch: expected ${releaseId} but got ${release.id}`);
+              if (release.id !== numericReleaseId) {
+                console.error(`Release ID string is [${releaseId}]`);
+                console.error(`Release ID mismatch: expected ${numericReleaseId} but got ${release.id}`);
+                core.setFailed(`Release ID mismatch: expected ${numericReleaseId} but got ${release.id}`);
                 return;
               }
 
