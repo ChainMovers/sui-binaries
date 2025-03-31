@@ -7,9 +7,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  process-mainnet-release:
+  process-release:
     uses: ./.github/workflows/site-builder-release.yml
     with:
-      network: mainnet
+      network: testnet
     permissions:
       contents: write
+    secrets: inherit

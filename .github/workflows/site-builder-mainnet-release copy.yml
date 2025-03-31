@@ -3,13 +3,14 @@ name: Site Builder Mainnet Release
 on:
   schedule:
     # Run 4 times per day (every 6 hours)
-    - cron: '0 0,6,12,18 * * *'
+    - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
 
 jobs:
-  process-mainnet-release:
+  process-release:
     uses: ./.github/workflows/site-builder-release.yml
     with:
       network: mainnet
     permissions:
       contents: write
+    secrets: inherit

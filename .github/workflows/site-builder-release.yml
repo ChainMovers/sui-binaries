@@ -162,7 +162,7 @@ jobs:
           - { os: ubuntu-latest, name: ubuntu-x86_64 }
           - { os: macos-latest, name: macos-x86_64 }
           - { os: macos-latest, name: macos-arm64 }
-          - { os: windows-latest, name: windows-x86_64.exe }
+          - { os: windows-latest, name: windows-x86_64 }
       fail-fast: false
 
     steps:
@@ -326,9 +326,17 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            const assetPath = path.join('${{ runner.temp }}', 'site-builder', '${{ env.ASSET_NAME }}');
+            const tempDir = process.env.RUNNER_TEMP;
             const assetName = process.env.ASSET_NAME;
             const uploadUrl = process.env.UPLOAD_URL;
+
+            const assetPath = path.join(tempDir, 'site-builder', assetName);
+
+            if (!fs.existsSync(assetPath)) {
+              console.error(`Asset file not found: ${assetPath}`);
+              core.setFailed(`Asset file not found: ${assetPath}`);
+              return;
+            }
 
             const stats = fs.statSync(assetPath);
 
