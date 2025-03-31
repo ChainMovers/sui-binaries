@@ -39,9 +39,9 @@ jobs:
       version: ${{ steps.version_check.outputs.version }}
       has_new_version: ${{ steps.version_check.outputs.has_new_version }}
       should_build_assets: ${{ steps.version_check.outputs.should_build_assets }}
-      upload_url: ${{ steps.create_or_get_release.outputs.result.upload_url }}
       release_tag: ${{ steps.version_check.outputs.release_tag }}
-      release_id: ${{ steps.create_or_get_release.outputs.result.release_id }}
+      upload_url: ${{ fromJSON(steps.create_or_get_release.outputs.result).upload_url }}
+      release_id: ${{ fromJSON(steps.create_or_get_release.outputs.result).release_id }}
 
     steps:
       - name: Download latest site-builder (ubuntu)
@@ -155,6 +155,7 @@ jobs:
       BINARY_NAME: site-builder${{ matrix.system.os == 'windows-latest' && '.exe' || '' }}
       RELEASE_TAG: ${{ needs.check-version.outputs.release_tag }}
       UPLOAD_URL: ${{ needs.check-version.outputs.upload_url }}
+      RELEASE_ID: ${{ needs.check-version.outputs.release_id }}
     strategy:
       matrix:
         system:
@@ -175,6 +176,7 @@ jobs:
             console.log(`- BINARY_NAME: ${process.env.BINARY_NAME}`);
             console.log(`- RELEASE_TAG: ${process.env.RELEASE_TAG}`);
             console.log(`- UPLOAD_URL: ${process.env.UPLOAD_URL}`);
+            console.log(`- RELEASE_ID: ${process.env.RELEASE_ID}`);
 
             const releaseTag = process.env.RELEASE_TAG;
             const assetName = process.env.ASSET_NAME;
@@ -187,80 +189,133 @@ jobs:
 
               const release = releases.data.find(r => r.tag_name === releaseTag);
               if (!release) {
-                console.log(`Release ${releaseTag} not found`);
+                console.log(`Error: Release ${releaseTag} not found`);
                 return { exists: false };
               }
 
               const assetExists = release.assets.some(asset => asset.name === assetName);
               if (assetExists) {
-                console.log(`Asset ${assetName} already exists in release ${releaseTag}`);
+                console.log(`Info: Asset ${assetName} already exists in release ${releaseTag}`);
                 return { exists: true };
               } else {
-                console.log(`Asset ${assetName} does not exist in release ${releaseTag}`);
+                console.log(`Info: Asset ${assetName} does not exist in release ${releaseTag}`);
                 return { exists: false };
               }
             } catch (error) {
-              console.error(`Error checking assets: ${error.message}`);
+              console.error(`Error: while checking assets: ${error.message}`);
               return { exists: false };
             }
 
       - name: Download site-builder binary
         if: fromJSON(steps.check_asset.outputs.result).exists == false
         run: |
-          mkdir -p ${{ runner.temp }}/site-builder
-          curl -L https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }} -o ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}
-          chmod +x ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}
+          # Create directory (works on all platforms)
+          mkdir -p "${{ runner.temp }}/site-builder"
+
+          # Set binary path based on OS
+          if [ "${{ runner.os }}" == "Windows" ]; then
+              # For Windows, use native paths for file operations
+              DOWNLOAD_URL="https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }}"
+              BINARY_PATH="${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
+
+              echo "Downloading $DOWNLOAD_URL to $BINARY_PATH"
+              # Use curl with forward slashes even on Windows
+              curl -L "$DOWNLOAD_URL" -o "$BINARY_PATH"
+
+              # No need to chmod on Windows
+          else
+              # For Linux/macOS
+              curl -L "https://storage.googleapis.com/mysten-walrus-binaries/site-builder-${{ inputs.network }}-latest-${{ matrix.system.name }}" -o "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
+              chmod +x "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
+          fi
 
           # Verify download was successful
-          if [ ! -f ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} ]; then
-            echo "Download failed - file not found"
-            exit 1
+          if [ ! -f "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}" ]; then
+              echo "Download failed - file not found at ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}"
+              exit 1
           fi
 
           # Check file size
-          filesize=$(wc -c < "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}")
+          filesize=$(wc -c < "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}" 2>/dev/null || echo 0)
           echo "Downloaded file size: $filesize bytes"
           if [ "$filesize" -lt 1000 ]; then
-            echo "File size too small, likely not a valid binary"
-            exit 1
+              echo "File size too small, likely not a valid binary"
+              exit 1
           fi
-
         shell: bash
 
       - name: Sanity check version
         if: fromJSON(steps.check_asset.outputs.result).exists == false
         run: |
-            if [ "${{ matrix.system.name }}" == "macos-arm64" ]; then
-                # macos-latest is x86_64, so can't run ARM64 binary...
-                # So just validate the "arm64" embeded file type exists.
-                if [ "${{ matrix.system.name }}" == "macos-arm64" ]; then
-                    if file ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} | grep -q "arm64"; then
-                        echo "Verified ARM64 binary"
-                    else
-                        echo "Not an ARM64 binary!"
-                        exit 1
-                    fi
-                fi
-            else
-                echo "Raw version output:"
-                ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} --version
-                detected_version=$(${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-                detected_version="v$detected_version"
-                if [ "$detected_version" == "${{ needs.check-version.outputs.version }}" ]; then
-                    echo "Runtime version as expected [$detected_version]"
-                else
-                    echo "Runtime version mismatch: expected ${{ needs.check-version.outputs.version }} but got $detected_version"
-                    exit 1
-                fi
-            fi
-            echo "Version verified: $detected_version"
+          detected_version=""
+
+          if [ "${{ matrix.system.name }}" == "macos-arm64" ]; then
+              # macos-latest is x86_64, so can't run ARM64 binary...
+              # So just validate the "arm64" embeded file type exists.
+              if [ "${{ matrix.system.name }}" == "macos-arm64" ]; then
+                  if file ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} | grep -q "arm64"; then
+                      echo "Verified ARM64 binary"
+                  else
+                      echo "Not an ARM64 binary!"
+                      exit 1
+                  fi
+              fi
+          else
+              # Try to get version - handle different formats across platforms
+              if [ "${{ runner.os }}" == "Windows" ]; then
+                  "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}" --version || {
+                      echo "Error running Windows binary for version check"
+                      exit 1
+                  }
+
+                  # More flexible pattern matching for Windows output
+                  detected_version=$("${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}" --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+              else
+                  "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}" --version
+                  detected_version=$("${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}" --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+              fi
+
+              # Add v prefix if needed
+              if [[ $detected_version != v* ]]; then
+                  detected_version="v$detected_version"
+              fi
+
+              # Check version
+              if [ "$detected_version" == "${{ needs.check-version.outputs.version }}" ]; then
+                  echo "Runtime version as expected [$detected_version]"
+              else
+                  echo "Runtime version mismatch: expected ${{ needs.check-version.outputs.version }} but got $detected_version"
+                  exit 1
+              fi
+          fi
+          echo "Version verified: $detected_version"
         shell: bash
 
       - name: Package binary
         if: fromJSON(steps.check_asset.outputs.result).exists == false
         run: |
-          cd ${{ runner.temp }}/site-builder
-          tar -czf ${{ env.ASSET_NAME }} ${{ env.BINARY_NAME }}
+          cd "${{ runner.temp }}/site-builder" || { echo "Failed to change directory"; exit 1; }
+
+          echo "Packaging binary ${{ env.BINARY_NAME }} into ${{ env.ASSET_NAME }}"
+
+          tar -czf "${{ env.ASSET_NAME }}" "${{ env.BINARY_NAME }}"
+
+          # Verify archive was created successfully
+          if [ ! -f "${{ env.ASSET_NAME }}" ]; then
+              echo "Failed to create archive ${{ env.ASSET_NAME }}"
+              exit 1
+          fi
+
+          echo "Archive contents:"
+          tar -tvf "${{ env.ASSET_NAME }}"
+
+          archive_size=$(wc -c < "${{ env.ASSET_NAME }}" 2>/dev/null || echo 0)
+          echo "Archive size: $archive_size bytes"
+
+          if [ "$archive_size" -lt 1000 ]; then
+              echo "Warning: Archive size is suspiciously small"
+              exit 1
+          fi
         shell: bash
 
       - name: Upload Asset
@@ -300,13 +355,31 @@ jobs:
     needs: [check-version, build-assets]
     if: ${{ needs.check-version.outputs.has_new_version == 'true' && always() }}
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.check-version.outputs.release_tag }}
+      UPLOAD_URL: ${{ needs.check-version.outputs.upload_url }}
+      RELEASE_ID: ${{ needs.check-version.outputs.release_id }}
+      VERSION: ${{ needs.check-version.outputs.version }}
+      NETWORK: ${{ inputs.network }}
 
     steps:
       - name: Verify all assets and publish release
         uses: actions/github-script@v7
         with:
           script: |
-            const releaseTag = "${{ needs.check-version.outputs.release_tag }}";
+            console.log('Environment variables:');
+            console.log(`- RELEASE_TAG: ${process.env.RELEASE_TAG}`);
+            console.log(`- UPLOAD_URL: ${process.env.UPLOAD_URL}`);
+            console.log(`- RELEASE_ID: ${process.env.RELEASE_ID}`);
+            console.log(`- VERSION: ${process.env.VERSION}`);
+            console.log(`- NETWORK: ${process.env.NETWORK}`);
+
+            const releaseTag = process.env.RELEASE_TAG;
+            const uploadUrl = process.env.UPLOAD_URL;
+            const releaseId = process.env.RELEASE_ID;
+            const version = process.env.VERSION;
+            const network = process.env.NETWORK;
+
             const expectedSystems = [
               'ubuntu-x86_64',
               'macos-arm64',
@@ -328,9 +401,15 @@ jobs:
                 return;
               }
 
+              // Sanity test that release.id matches the one identified
+              // ealier in the workflow.
+              if (release.id !== releaseId) {
+                console.error(`Release ID mismatch: expected ${releaseId} but got ${release.id}`);
+                core.setFailed(`Release ID mismatch: expected ${releaseId} but got ${release.id}`);
+                return;
+              }
+
               // Check for all required assets
-              const version = "${{ needs.check-version.outputs.version }}";
-              const network = "${{ inputs.network }}";
               const expectedAssets = expectedSystems.map(system =>
                 `site-builder-${network}-${version}-${system}.tgz`
               );
@@ -350,7 +429,7 @@ jobs:
               await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: release.id,
+                release_id: releaseId,
                 draft: false
               });
 
