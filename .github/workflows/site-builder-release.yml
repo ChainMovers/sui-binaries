@@ -57,7 +57,7 @@ jobs:
           fi
 
           # Check file size
-          filesize=$(stat -c%s "${{ runner.temp }}/site-builder/site-builder")
+          filesize=$(wc -c < "${{ runner.temp }}/site-builder/site-builder")
           echo "Downloaded file size: $filesize bytes"
           if [ "$filesize" -lt 1000 ]; then
             echo "File size too small, likely not a valid binary"
@@ -153,6 +153,8 @@ jobs:
     env:
       ASSET_NAME: site-builder-${{ inputs.network }}-${{ needs.check-version.outputs.version }}-${{ matrix.system.name }}.tgz
       BINARY_NAME: site-builder${{ matrix.system.os == 'windows-latest' && '.exe' || '' }}
+      RELEASE_TAG: ${{ needs.check-version.outputs.release_tag }}
+      UPLOAD_URL: ${{ needs.check-version.outputs.upload_url }}
     strategy:
       matrix:
         system:
@@ -168,6 +170,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            console.log('Environment variables:');
+            console.log(`- ASSET_NAME: ${process.env.ASSET_NAME}`);
+            console.log(`- BINARY_NAME: ${process.env.BINARY_NAME}`);
+            console.log(`- RELEASE_TAG: ${process.env.RELEASE_TAG}`);
+            console.log(`- UPLOAD_URL: ${process.env.UPLOAD_URL}`);
+
             const releaseTag = process.env.RELEASE_TAG;
             const assetName = process.env.ASSET_NAME;
 
@@ -210,7 +218,7 @@ jobs:
           fi
 
           # Check file size
-          filesize=$(stat -c%s "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}")
+          filesize=$(wc -c < "${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }}")
           echo "Downloaded file size: $filesize bytes"
           if [ "$filesize" -lt 1000 ]; then
             echo "File size too small, likely not a valid binary"
@@ -222,16 +230,30 @@ jobs:
       - name: Sanity check version
         if: fromJSON(steps.check_asset.outputs.result).exists == false
         run: |
-          echo "Raw version output:"
-          ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} --version
-
-          detected_version=$(${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-          detected_version="v$detected_version"
-          if [ "$detected_version" != "${{ needs.check-version.outputs.version }}" ]; then
-          echo "Version mismatch: expected ${{ needs.check-version.outputs.version }} but got $detected_version"
-          exit 1
-          fi
-          echo "Version verified: $detected_version"
+            if [ "${{ matrix.system.name }}" == "macos-arm64" ]; then
+                # macos-latest is x86_64, so can't run ARM64 binary...
+                # So just validate the "arm64" embeded file type exists.
+                if [ "${{ matrix.system.name }}" == "macos-arm64" ]; then
+                    if file ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} | grep -q "arm64"; then
+                        echo "Verified ARM64 binary"
+                    else
+                        echo "Not an ARM64 binary!"
+                        exit 1
+                    fi
+                fi
+            else
+                echo "Raw version output:"
+                ${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} --version
+                detected_version=$(${{ runner.temp }}/site-builder/${{ env.BINARY_NAME }} --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                detected_version="v$detected_version"
+                if [ "$detected_version" == "${{ needs.check-version.outputs.version }}" ]; then
+                    echo "Runtime version as expected [$detected_version]"
+                else
+                    echo "Runtime version mismatch: expected ${{ needs.check-version.outputs.version }} but got $detected_version"
+                    exit 1
+                fi
+            fi
+            echo "Version verified: $detected_version"
         shell: bash
 
       - name: Package binary
