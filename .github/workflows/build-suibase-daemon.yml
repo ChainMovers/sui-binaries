@@ -245,12 +245,46 @@ jobs:
         run: |
           asset_name="${{ steps.asset_vars.outputs.asset_name }}"
           cargo_version="${{ needs.prepare-release.outputs.cargo_version }}"
+
+          # Ensure musl target is available for the Rust toolchain that Suibase uses
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            # Install musl matching Suibase's rust-toolchain.toml
+            rust_channel=$(grep '^channel' $HOME/suibase/rust/suibase/rust-toolchain.toml | sed 's/channel = "\(.*\)"/\1/')
+            echo "Installing Rust $rust_channel toolchain with musl target (required by Suibase)"
+            rustup toolchain install $rust_channel --target x86_64-unknown-linux-musl --profile minimal
+          fi
+
           # Don't care about the exit code of update-daemon. What is important
           # is if the binary was built or not.
           $HOME/suibase/scripts/dev/update-daemon || true
           if [ ! -f $HOME/suibase/workdirs/common/bin/suibase-daemon ]; then
             echo "suibase-daemon not found"
             exit 1
+          fi
+
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            echo "=== Binary Analysis ==="
+            binary_path="$HOME/suibase/workdirs/common/bin/suibase-daemon"
+
+            if [[ ! -f "$binary_path" ]]; then
+              echo "❌ Binary not found at $binary_path"
+              exit 1
+            fi
+
+            echo "File info:"
+            file "$binary_path" || echo "Warning: file command failed"
+
+            echo "Library dependencies:"
+            ldd_output=$(ldd "$binary_path" 2>&1) || echo "Warning: ldd command failed"
+            echo "$ldd_output"
+
+            # Check for MUSL specifically
+            if strings "$binary_path" | grep -i musl > /dev/null 2>&1; then
+              echo "✅ MUSL detected in binary"
+            else
+              echo "❌ Binary appears to be dynamically linked"
+              exit 1
+            fi
           fi
 
           # Sanity test that the binary version is as expected.
