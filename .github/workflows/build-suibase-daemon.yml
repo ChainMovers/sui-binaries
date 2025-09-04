@@ -213,21 +213,35 @@ jobs:
           cache: "false" # Control cache in "Rust Caching" step instead.
           target: ${{ runner.os == 'Linux' && 'x86_64-unknown-linux-musl' || '' }}
 
-      - name: Sui Prerequisites
-        if: steps.asset_vars.outputs.do_build == 'true'
+      - name: Sui Prerequesites (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo apt-get update
-            sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential musl musl-tools musl-dev
-            echo Installed Linux dependencies
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            brew install curl cmake
-            echo Installed macOS dependencies
-          else
-            echo "Unsupported OS: $RUNNER_OS"
-            exit 1
-          fi
+          sudo apt update
+          sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential musl musl-tools musl-dev
 
+      - name: Sui Prerequesites (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Only install curl if not already present
+          if ! command -v curl &>/dev/null; then
+            brew install curl
+          else
+            echo "curl already installed, skipping"
+          fi
+          # Handle cmake with tap conflict resolution
+          if ! command -v cmake &>/dev/null; then
+            brew install cmake
+          else
+            echo "cmake already installed, checking for tap conflicts"
+            if brew reinstall cmake 2>/dev/null; then
+              echo "cmake reinstalled successfully"
+            else
+              echo "cmake reinstall failed, trying uninstall/install approach"
+              brew uninstall cmake
+              brew install cmake
+            fi
+          fi
+          
       - name: Download Suibase and add to $PATH
         if: steps.asset_vars.outputs.do_build == 'true'
         run: |
