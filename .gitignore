@@ -1,0 +1,21 @@
+# Build artifacts and release packages
+*.tgz
+
+# Temporary build directories
+/tmp/seal-build-*
+/tmp/seal-package-*
+/tmp/site-builder-*
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
