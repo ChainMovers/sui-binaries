@@ -129,7 +129,7 @@ clone_seal() {
 # Build SEAL binaries
 build_binaries() {
     local seal_dir="$1"
-    log_info "Building SEAL binaries with performance optimizations..."
+    log_info "Building SEAL binaries..."
     
     # Change to SEAL directory
     cd "$seal_dir"
@@ -153,21 +153,19 @@ build_binaries() {
         fi
     fi
     
-    # Build for native platform with performance optimizations
-    log_info "Building native binaries with ThinLTO optimizations..."
-    export RUSTFLAGS="-C lto=thin"
+    # Build for native platform
+    log_info "Building native binaries..."
     cargo build --release
     
     # Build for musl target on Linux with static OpenSSL and performance optimizations
     if [[ "$(uname -s)" == "Linux" ]]; then
-        log_info "Building musl binaries for Linux with static OpenSSL and ThinLTO..."
+        log_info "Building musl binaries for Linux with static OpenSSL..."
         
         # Set environment variables for static musl build
         export PKG_CONFIG_ALLOW_CROSS=1
         export PKG_CONFIG_ALL_STATIC=1
         export OPENSSL_STATIC=1
         export OPENSSL_DIR=/usr
-        export RUSTFLAGS="-C lto=thin"
         
         # Try to build with musl - if it fails, skip musl and continue with native only
         if ! cargo build --release --target x86_64-unknown-linux-musl; then
@@ -178,11 +176,8 @@ build_binaries() {
         fi
         
         # Unset environment variables
-        unset PKG_CONFIG_ALLOW_CROSS PKG_CONFIG_ALL_STATIC OPENSSL_STATIC OPENSSL_DIR RUSTFLAGS
+        unset PKG_CONFIG_ALLOW_CROSS PKG_CONFIG_ALL_STATIC OPENSSL_STATIC OPENSSL_DIR
     fi
-    
-    # Unset RUSTFLAGS for native builds too
-    unset RUSTFLAGS
 }
 
 # Verify binaries work

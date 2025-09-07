@@ -14,7 +14,7 @@ Follows suibase-daemon build pattern exactly, except triggered by scheduled moni
 scripts/build-seal.sh
 ```
 - Clone MystenLabs/seal repository
-- Build all SEAL binaries with performance optimizations
+- Build all SEAL binaries
 - Package as .tgz archives
 - Enable local testing and debugging before CI runs
 - Provide single source of truth for build logic
@@ -29,7 +29,7 @@ scripts/build-seal.sh
 
 ### Build Requirements
 - **Dependencies**: Same as suibase-daemon (curl, cmake, gcc, libssl-dev, pkg-config, libclang-dev, libpq-dev, build-essential, musl tools)
-- **Build**: `RUSTFLAGS="-C lto=thin" cargo build --release`
+- **Build**: `cargo build --release`
 - **Platforms**: ubuntu-x86_64 (musl), macos-arm64, macos-x86_64
 - **Verification**: Test with `--version` or `--help` before packaging
 
@@ -54,9 +54,9 @@ scripts/build-seal.sh
 # Clone upstream source
 git clone --branch seal-v{version} https://github.com/MystenLabs/seal.git
 
-# Build with performance optimizations
-RUSTFLAGS="-C lto=thin" cargo build --release
+# Build binaries
+cargo build --release
 
 # Ubuntu musl target
-RUSTFLAGS="-C lto=thin" cargo build --release --target x86_64-unknown-linux-musl
+cargo build --release --target x86_64-unknown-linux-musl
 ```
