@@ -189,10 +189,23 @@ verify_binaries() {
     cd "$seal_dir"
     
     local target_dir="target/release"
-    # Check if musl binaries exist, otherwise use native
+    # Check if musl binaries exist and have actual binaries, otherwise use native
     if [[ "$(uname -s)" == "Linux" ]] && [[ -d "target/x86_64-unknown-linux-musl/release" ]]; then
-        target_dir="target/x86_64-unknown-linux-musl/release"
-        log_info "Using musl binaries for verification" >&2
+        # Check if any of the expected binaries exist in musl directory
+        local has_musl_binaries=false
+        for binary in "key-server" "seal-cli" "seal-proxy"; do
+            if [[ -f "target/x86_64-unknown-linux-musl/release/$binary" ]]; then
+                has_musl_binaries=true
+                break
+            fi
+        done
+        
+        if [[ "$has_musl_binaries" == "true" ]]; then
+            target_dir="target/x86_64-unknown-linux-musl/release"
+            log_info "Using musl binaries for verification" >&2
+        else
+            log_info "Musl directory exists but no binaries found, using native binaries for verification" >&2
+        fi
     else
         log_info "Using native binaries for verification" >&2
     fi
@@ -244,10 +257,23 @@ package_binaries() {
     local target_dir="target/release"
     local original_dir="$(pwd)"  # Capture where script was called from
     
-    # Check if musl binaries exist, otherwise use native
+    # Check if musl binaries exist and have actual binaries, otherwise use native
     if [[ "$(uname -s)" == "Linux" ]] && [[ -d "$seal_dir/target/x86_64-unknown-linux-musl/release" ]]; then
-        target_dir="target/x86_64-unknown-linux-musl/release"
-        log_info "Packaging musl binaries"
+        # Check if any of the expected binaries exist in musl directory
+        local has_musl_binaries=false
+        for binary in "${binaries[@]}"; do
+            if [[ -f "$seal_dir/target/x86_64-unknown-linux-musl/release/$binary" ]]; then
+                has_musl_binaries=true
+                break
+            fi
+        done
+        
+        if [[ "$has_musl_binaries" == "true" ]]; then
+            target_dir="target/x86_64-unknown-linux-musl/release"
+            log_info "Packaging musl binaries"
+        else
+            log_info "Musl directory exists but no binaries found, packaging native binaries"
+        fi
     else
         log_info "Packaging native binaries"
     fi
@@ -275,11 +301,11 @@ package_binaries() {
     cd "$original_dir"
     rm -rf "$package_dir"
     
-    log_info "✓ Package created: $original_dir/$asset_name"
+    log_info "✓ Package created: $original_dir/$asset_name" >&2
     
     # Verify package contents
-    log_info "Package contents:"
-    tar -tzf "$asset_name"
+    log_info "Package contents:" >&2
+    tar -tzf "$asset_name" >&2
     
     echo "$asset_name"
 }
