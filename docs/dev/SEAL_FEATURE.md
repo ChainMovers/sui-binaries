@@ -22,15 +22,15 @@ scripts/build-seal.sh
 ### 2. GitHub Actions Workflows
 
 - Triggered by scheduled cron (4x daily) + manual dispatch
-- Build matrix: ubuntu-x86_64 (musl), macos-arm64, macos-x86_64
+- Build matrix: ubuntu-x86_64 (native)
 - Creates `seal-v{version}-{platform}.tgz` with all SEAL binaries
 
 ## Key Implementation Details
 
 ### Build Requirements
-- **Dependencies**: Same as suibase-daemon (curl, cmake, gcc, libssl-dev, pkg-config, libclang-dev, libpq-dev, build-essential, musl tools)
+- **Dependencies**: Same as suibase-daemon (curl, cmake, gcc, libssl-dev, pkg-config, libclang-dev, libpq-dev, build-essential)
 - **Build**: `cargo build --release`
-- **Platforms**: ubuntu-x86_64 (musl), macos-arm64, macos-x86_64
+- **Platforms**: ubuntu-x86_64 (native)
 - **Verification**: Test with `--version` or `--help` before packaging
 
 ## Files to Create
@@ -56,7 +56,4 @@ git clone --branch seal-v{version} https://github.com/MystenLabs/seal.git
 
 # Build binaries
 cargo build --release
-
-# Ubuntu musl target
-cargo build --release --target x86_64-unknown-linux-musl
 ```

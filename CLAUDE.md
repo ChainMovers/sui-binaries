@@ -26,7 +26,7 @@ This repository provides pre-compiled binaries for the Sui ecosystem, specifical
   - `key-server` - Decentralized key management server (~28MB)
   - `seal-cli` - Command-line interface for SEAL operations (~1.5MB)
   - `seal-proxy` - Proxy service for SEAL network communication (~13MB)
-- **Build Target**: Cross-platform binaries with musl linking on Linux for static builds
+- **Build Target**: Native Ubuntu binaries
 - **Dependencies**: Uses tokio async runtime, axum web framework, Sui SDK integration
 - **Dynamic Toolchain**: Automatically detects and uses SEAL's required Rust version from `rust-toolchain.toml`
 
@@ -55,7 +55,7 @@ $HOME/suibase/workdirs/common/bin/suibase-daemon
 ### Dependencies (Linux)
 ```bash
 sudo apt-get update
-sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential musl musl-tools musl-dev
+sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential
 ```
 
 ### Dependencies (macOS)
@@ -96,7 +96,7 @@ cargo build --release
 ```bash
 # Same as Suibase Daemon dependencies
 sudo apt-get update
-sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential musl musl-tools musl-dev
+sudo apt-get install curl cmake gcc libssl-dev pkg-config libclang-dev libpq-dev build-essential
 ```
 
 #### Dependencies (macOS - for SEAL)
