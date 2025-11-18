@@ -27,25 +27,31 @@ log_error() {
 # Get latest SEAL version from GitHub API
 get_latest_seal_version() {
     local version="${SEAL_VERSION:-latest}"
-    
+
     if [[ "$version" == "latest" ]]; then
-        local latest_tag=$(curl -s https://api.github.com/repos/MystenLabs/seal/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+        # Fetch all releases and filter for stable releases only
+        # Filter out prerelease versions AND versions with suffixes like -candidate, -alpha, -beta, -rc
+        local latest_tag=$(curl -s https://api.github.com/repos/MystenLabs/seal/releases | \
+            jq -r '.[] | select(.prerelease == false) | .tag_name' | \
+            grep -E '^seal-v[0-9]+\.[0-9]+\.[0-9]+$' | \
+            head -n 1)
+
         if [[ -z "$latest_tag" ]]; then
-            log_error "Failed to fetch latest version from GitHub API"
+            log_error "Failed to fetch latest stable version from GitHub API"
             exit 1
         fi
         version="$latest_tag"
     fi
-    
+
     # Remove 'seal-v' prefix if present
     version=${version#seal-v}
-    
-    # Verify the version string format
+
+    # Verify the version string format (X.Y.Z only, no suffixes like -candidate)
     if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        log_error "Invalid version format: $version"
+        log_error "Invalid version format: $version (only stable X.Y.Z versions are supported)"
         exit 1
     fi
-    
+
     echo "$version"
     exit 0
 }
