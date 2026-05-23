@@ -151,8 +151,6 @@ jobs:
             asset-name-suffix: ubuntu-x86_64
           - os: macos-latest
             asset-name-suffix: macos-arm64
-          - os: macos-13
-            asset-name-suffix: macos-x86_64
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
