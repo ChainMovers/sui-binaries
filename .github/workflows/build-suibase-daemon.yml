@@ -145,7 +145,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-13]
+        os: [ubuntu-latest, macos-latest]
         include:
           - os: ubuntu-latest
             asset-name-suffix: ubuntu-x86_64
@@ -387,7 +387,6 @@ jobs:
             const tag_name = "${{ needs.prepare-release.outputs.tag_name }}";
             const expectedAssets = [
               `${tag_name}-ubuntu-x86_64.tgz`,
-              `${tag_name}-macos-x86_64.tgz`,
               `${tag_name}-macos-arm64.tgz`
             ];
             const { data: releases } = await github.rest.repos.listReleases({
