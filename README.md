@@ -1,2 +1,2 @@
 # sui-binaries
-Additional pre-compiled binaries
+Additional pre-compiled binaries.
