@@ -2,8 +2,8 @@ name: Sui Min Devnet Release
 
 on:
   schedule:
-    # Twice a day; staggered from the other networks.
-    - cron: "30 3,15 * * *"
+    # Every 30 min; offset off the :00/:15/:30/:45 boundaries and staggered per network.
+    - cron: "27,57 * * * *"
   workflow_dispatch:
     inputs:
       version:

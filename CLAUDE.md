@@ -47,14 +47,15 @@ This repository provides pre-compiled binaries for the Sui ecosystem, specifical
 - **Helpers**: `scripts/get-latest-sui-version.sh <network> [version]` resolves the upstream version;
   `scripts/strip-sui-tarball.sh <in.tgz> <out.tgz>` does the strip + self-verification.
 - **Workflows**: `sui-min-release.yml` (reusable) + per-network callers `sui-min-{testnet,mainnet,devnet}-release.yml`
-  (twice-daily cron + `workflow_dispatch`; dispatch accepts an optional `version` for backfill).
+  (every-30-min cron + `workflow_dispatch`; dispatch accepts an optional `version` for backfill). Cron minutes
+  are offset off the :00/:15/:30/:45 boundaries and staggered per network (testnet 7,37 / mainnet 19,49 / devnet 27,57).
 
 ### Release Automation
 The repository uses GitHub Actions for automated binary building and releases:
 - **Suibase Daemon**: Triggered by `Cargo.toml` version changes
 - **SEAL Binaries**: Cron-based monitoring every 6 hours for new GitHub releases, with duplicate build prevention
 - **Site Builder**: Scheduled downloads from Google Cloud Storage with automatic versioning
-- **Sui Min Binaries**: Cron-based (twice daily per network) mirror+strip of the latest official Sui release, idempotent (skips already-published versions), drafts auto-publish once all platform assets are present
+- **Sui Min Binaries**: Cron-based (every 30 min per network) mirror+strip of the latest official Sui release, idempotent (skips already-published versions), drafts auto-publish once all platform assets are present
 
 ## Build Commands
 
