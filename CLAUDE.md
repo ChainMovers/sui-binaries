@@ -8,6 +8,7 @@ This repository provides pre-compiled binaries for the Sui ecosystem, specifical
 - **suibase-daemon**: A Rust workspace containing daemon functionality for Suibase
 - **seal binaries**: Automated builds and releases of SEAL (decentralized secrets management) binaries from MystenLabs
 - **site-builder binaries**: Automated downloads and releases of site-builder binaries from Mysten Labs
+- **sui "min" binaries**: Repackaged official MystenLabs Sui release tarballs with large/unused binaries stripped (no rebuild)
 
 ## Architecture
 
@@ -30,11 +31,30 @@ This repository provides pre-compiled binaries for the Sui ecosystem, specifical
 - **Dependencies**: Uses tokio async runtime, axum web framework, Sui SDK integration
 - **Dynamic Toolchain**: Automatically detects and uses SEAL's required Rust version from `rust-toolchain.toml`
 
+### Sui Min Binaries
+- **Source**: Official release tarballs from `https://github.com/MystenLabs/sui` (downloaded, never rebuilt)
+- **What it does**: For each network (mainnet/testnet/devnet) and platform, downloads the official
+  `sui-<network>-v<ver>-<platform>.tgz`, removes the large/unused binaries, and republishes the rest.
+- **Stripped binaries** (`scripts/strip-sui-tarball.sh`): `sui-debug` (~3.3 GB uncompressed),
+  `sui-fork`, `sui-bridge`, `sui-bridge-cli` (and their `.exe` variants). Kept binaries
+  (`sui`, `sui-node`, `sui-faucet`, `sui-tool`, `move-analyzer`) are byte-identical to upstream.
+- **Effect**: Linux download drops from ~1 GB to ~150 MB.
+- **Release shape**:
+  - tag: `sui-<network>-v<ver>-min` (e.g. `sui-testnet-v1.73.0-min`)
+  - assets: `<tag>-<platform>.tgz`, one per platform; release stays a draft until all are present.
+- **Naming rationale**: keeps the network in the tag and the `<platform>-<arch>` substring contiguous
+  so Suibase's precompiled-asset matcher (`scripts/common/__apps.sh`) can consume them unchanged.
+- **Helpers**: `scripts/get-latest-sui-version.sh <network> [version]` resolves the upstream version;
+  `scripts/strip-sui-tarball.sh <in.tgz> <out.tgz>` does the strip + self-verification.
+- **Workflows**: `sui-min-release.yml` (reusable) + per-network callers `sui-min-{testnet,mainnet,devnet}-release.yml`
+  (twice-daily cron + `workflow_dispatch`; dispatch accepts an optional `version` for backfill).
+
 ### Release Automation
 The repository uses GitHub Actions for automated binary building and releases:
 - **Suibase Daemon**: Triggered by `Cargo.toml` version changes
 - **SEAL Binaries**: Cron-based monitoring every 6 hours for new GitHub releases, with duplicate build prevention
 - **Site Builder**: Scheduled downloads from Google Cloud Storage with automatic versioning
+- **Sui Min Binaries**: Cron-based (twice daily per network) mirror+strip of the latest official Sui release, idempotent (skips already-published versions), drafts auto-publish once all platform assets are present
 
 ## Build Commands
 

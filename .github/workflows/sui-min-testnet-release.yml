@@ -1,0 +1,23 @@
+name: Sui Min Testnet Release
+
+on:
+  schedule:
+    # Twice a day; staggered from the other networks.
+    - cron: "30 1,13 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        required: false
+        type: string
+        default: ""
+        description: "Optional X.Y.Z to mirror a specific version (default: latest)"
+
+jobs:
+  process-release:
+    uses: ./.github/workflows/sui-min-release.yml
+    with:
+      network: testnet
+      version: ${{ inputs.version || '' }}
+    permissions:
+      contents: write
+    secrets: inherit
