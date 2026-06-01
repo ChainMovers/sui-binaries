@@ -79,8 +79,8 @@ jobs:
           fi
 
           # Decide whether work is needed on our side.
-          if gh release view "$release_tag" --json isDraft >/dev/null 2>&1; then
-            is_draft="$(gh release view "$release_tag" --json isDraft -q '.isDraft')"
+          if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" --json isDraft >/dev/null 2>&1; then
+            is_draft="$(gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q '.isDraft')"
             if [ "$is_draft" = "true" ]; then
               echo "Draft $release_tag already exists — will complete missing assets."
               echo "should_build_assets=true" >> "$GITHUB_OUTPUT"
@@ -130,7 +130,7 @@ jobs:
           mkdir -p "$work"
 
           # Idempotency: skip if this platform's min asset is already attached.
-          if gh release view "$RELEASE_TAG" --json assets -q '.assets[].name' \
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' \
                | grep -qx "$min_asset"; then
             echo "Asset $min_asset already present — skipping."
             exit 0
@@ -174,7 +174,7 @@ jobs:
       - name: Publish when all platform assets are present
         run: |
           set -euo pipefail
-          mapfile -t present < <(gh release view "$RELEASE_TAG" --json assets -q '.assets[].name')
+          mapfile -t present < <(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name')
 
           missing=()
           for platform in $PLATFORMS; do
@@ -187,7 +187,7 @@ jobs:
             exit 0
           fi
 
-          is_draft="$(gh release view "$RELEASE_TAG" --json isDraft -q '.isDraft')"
+          is_draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q '.isDraft')"
           if [ "$is_draft" = "false" ]; then
             echo "$RELEASE_TAG already published."
             exit 0
