@@ -78,6 +78,10 @@ jobs:
             exit 0
           fi
 
+          # Mirror the upstream prerelease flag (devnet is published as a
+          # prerelease; testnet/mainnet are full releases).
+          upstream_prerelease="$(gh release view "$upstream_tag" --repo MystenLabs/sui --json isPrerelease -q '.isPrerelease')"
+
           # Decide whether work is needed on our side.
           if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" --json isDraft >/dev/null 2>&1; then
             is_draft="$(gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q '.isDraft')"
@@ -89,11 +93,10 @@ jobs:
               echo "should_build_assets=false" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "Creating draft release $release_tag"
-            gh release create "$release_tag" \
-              --repo "$GITHUB_REPOSITORY" \
-              --draft \
-              --title "$release_tag" \
+            echo "Creating draft release $release_tag (prerelease=$upstream_prerelease)"
+            create_args=(--repo "$GITHUB_REPOSITORY" --draft --title "$release_tag")
+            [ "$upstream_prerelease" = "true" ] && create_args+=(--prerelease)
+            gh release create "$release_tag" "${create_args[@]}" \
               --notes "Slimmed (\"min\") build of MystenLabs \`$upstream_tag\` with sui-debug, sui-fork, sui-bridge and sui-bridge-cli removed. Kept binaries are byte-identical to upstream."
             echo "should_build_assets=true" >> "$GITHUB_OUTPUT"
           fi
