@@ -48,7 +48,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Resolve upstream version and target release
         id: resolve
@@ -121,7 +121,7 @@ jobs:
           - macos-x86_64
           - windows-x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build and upload min asset for ${{ matrix.platform }}
         run: |
