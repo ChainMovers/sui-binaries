@@ -324,6 +324,7 @@ jobs:
         if: fromJSON(steps.check_asset.outputs.result).exists == false
         uses: actions/github-script@v9
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
@@ -376,6 +377,7 @@ jobs:
       - name: Verify all assets and publish release
         uses: actions/github-script@v9
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             console.log('Environment variables:');
             console.log(`- RELEASE_TAG: ${process.env.RELEASE_TAG}`);
@@ -443,7 +445,7 @@ jobs:
               await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: releaseId,
+                release_id: numericReleaseId,
                 draft: false
               });
 
