@@ -1,0 +1,13 @@
+# Version carrier for the "localnet-tools" precompiled release (umbrella asset that
+# bundles suibase localnet dev-tool binaries; today just walrus-localnet-deploy).
+#
+# Only the `version` line is read (by build-localnet-tools.yml) to derive the release
+# tag localnet-tools-v<version>. The version is taken from the bundled binary's crate:
+# keep it in lockstep with ChainMovers/suibase rust/walrus-store/Cargo.toml `version`.
+# Bump it whenever that crate version changes (new pinned walrus rev or vendored
+# embedded-contracts), else the existing-tag check sees the tag already published and
+# never rebuilds.
+[package]
+name = "localnet-tools"
+version = "0.0.1"
+edition = "2021"
