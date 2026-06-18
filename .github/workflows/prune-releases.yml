@@ -1,0 +1,47 @@
+name: Prune Old Releases
+
+# Retention policy: keep only the most recent N releases per component
+# (see scripts/prune-old-releases.sh). The install scripts always fetch the
+# latest version, so a small buffer of previous versions is enough to cover
+# races where a client resolved an older "latest" just before a new release.
+
+on:
+  schedule:
+    # Daily at 05:00 UTC. Build workflows run on their own cadence; this just
+    # trims whatever has accumulated past the retention limit.
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (list what would be deleted, delete nothing)"
+        type: boolean
+        default: true
+      keep:
+        description: "Releases to keep per component (latest + previous)"
+        type: string
+        default: "3"
+
+permissions:
+  contents: write
+
+# Never let two prunes race against each other.
+concurrency:
+  group: prune-releases
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prune old releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ github.event.inputs.keep || '3' }}
+          # Scheduled runs apply deletions. Manual runs honor the dry_run input
+          # (default true), so a human can preview before deleting.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+        run: ./scripts/prune-old-releases.sh
