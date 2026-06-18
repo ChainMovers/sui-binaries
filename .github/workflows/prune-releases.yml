@@ -7,9 +7,13 @@ name: Prune Old Releases
 
 on:
   schedule:
-    # Daily at 05:00 UTC. Build workflows run on their own cadence; this just
-    # trims whatever has accumulated past the retention limit.
-    - cron: '0 5 * * *'
+    # Weekly, Sunday 08:47 UTC. Picked for low GitHub Actions load: weekends are
+    # the quietest days, and ~08:00 UTC is off-peak (Americas overnight, Europe
+    # weekend morning, before the work week starts anywhere). The :47 minute
+    # deliberately avoids the top-of-the-hour scheduling stampede (scheduled
+    # jobs at :00 are the most delayed) and the repo's other staggered crons.
+    # Pruning is not time-sensitive, so once a week is plenty.
+    - cron: '47 8 * * 0'
   workflow_dispatch:
     inputs:
       dry_run:

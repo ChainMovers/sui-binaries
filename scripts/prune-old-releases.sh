@@ -32,8 +32,12 @@ KEEP="${KEEP:-3}"             # releases to retain per component (latest + 2 pre
 DRY_RUN="${DRY_RUN:-true}"    # default to a safe dry-run; set "false" to delete
 REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
 
+# Safety: refuse to run with KEEP < 1. KEEP=0 would mark every release of a
+# component for deletion, including the latest — the newest release of every
+# component must always survive, so we abort rather than delete everything.
 if ! [[ "$KEEP" =~ ^[0-9]+$ ]] || [ "$KEEP" -lt 1 ]; then
-  echo "ERROR: KEEP must be a positive integer (got '$KEEP')" >&2
+  echo "ERROR: refusing to run — KEEP must be an integer >= 1 (got '$KEEP')." >&2
+  echo "       KEEP=0 would delete every release; the latest must always be kept." >&2
   exit 1
 fi
 
@@ -56,6 +60,7 @@ classified="$(
           | @tsv' \
   | sort -t"$(printf '\t')" -k1,1 -k2,2Vr \
   | awk -F'\t' -v keep="$KEEP" '
+      BEGIN { if (keep < 1) keep = 1 }   # hard floor: never delete the newest release of a component
       $1 != prev { prev = $1; n = 0 }
       { n++; printf "%s\t%s\t%s\t%s\n", (n > keep ? "DELETE" : "KEEP"), $1, $2, $3 }'
 )"
