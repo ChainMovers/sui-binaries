@@ -210,7 +210,9 @@ jobs:
         run: |
           set -euo pipefail
           asset_name="${{ steps.asset_vars.outputs.asset_name }}"
-          crate_dir="$HOME/suibase/rust/walrus-store"
+          # The binaries live in the suibase-owned BINS crate rust/localnet-tools (it
+          # builds on the thin library rust/walrus-store).
+          crate_dir="$HOME/suibase/rust/localnet-tools"
 
           # Install the toolchain pinned by the crate's rust-toolchain.toml (1.96).
           rust_channel=$(grep '^channel' "$crate_dir/rust-toolchain.toml" | sed 's/channel = "\(.*\)"/\1/')
@@ -219,11 +221,12 @@ jobs:
           # GNU (glibc) target, not musl: the walrus-sui graph pulls RocksDB and
           # other native deps that do not link cleanly under musl. A glibc binary
           # is fine for a localnet dev tool. (Revisit musl/static later if needed.)
-          # Build BOTH localnet-tools binaries in one invocation:
+          # Build BOTH localnet-tools binaries in one invocation (the crate enables
+          # walrus-store's `localnet` feature via its dependency, so no --features):
           #   - walrus-localnet-deploy : publishes nodeless Walrus on the localnet
           #   - sb-local               : the Walrus aggregator/publisher HTTP server
           cd "$crate_dir"
-          cargo build --release --features localnet --bin walrus-localnet-deploy --bin sb-local
+          cargo build --release --bin walrus-localnet-deploy --bin sb-local
 
           # Stage both where Suibase's downloader expects them (install_type=user ->
           # workdirs/common/bin; the consumer copies every name in localnet_tools_bin_names).
