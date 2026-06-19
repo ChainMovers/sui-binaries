@@ -245,7 +245,9 @@ jobs:
         run: |
           mkdir -p $HOME/.local/bin
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          git clone --branch dev https://github.com/ChainMovers/suibase.git $HOME/suibase
+          # Build from the PROMOTED branch (pre-staging), not a moving `dev`, so the
+          # published binary is compiled from exactly the source that staging validates.
+          git clone --branch pre-staging https://github.com/ChainMovers/suibase.git $HOME/suibase
 
       - name: Install Suibase
         if: steps.asset_vars.outputs.do_build == 'true'
