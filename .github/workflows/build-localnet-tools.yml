@@ -1,7 +1,7 @@
 name: Build Localnet Tools
 
 # Precompiles the "localnet-tools" asset — an umbrella tarball of suibase-owned
-# localnet dev-tool binaries (today just `walrus-localnet-deploy`, from the
+# localnet dev-tool binaries (`walrus-localnet-deploy` + `sb-local`, from the
 # ChainMovers/suibase crate rust/walrus-store, git-pinned to a walrus rev) so Suibase
 # localnet can download it instead of compiling the heavy walrus/Sui graph. Mirrors
 # build-suibase-daemon.yml. Independent of the suibase-daemon release pipeline (does
@@ -205,7 +205,7 @@ jobs:
           # (mirrors build-suibase-daemon.yml).
           git clone --branch pre-staging https://github.com/ChainMovers/suibase.git $HOME/suibase
 
-      - name: Build walrus-localnet-deploy
+      - name: Build localnet-tools binaries (walrus-localnet-deploy + sb-local)
         if: steps.asset_vars.outputs.do_build == 'true'
         run: |
           set -euo pipefail
@@ -219,23 +219,31 @@ jobs:
           # GNU (glibc) target, not musl: the walrus-sui graph pulls RocksDB and
           # other native deps that do not link cleanly under musl. A glibc binary
           # is fine for a localnet dev tool. (Revisit musl/static later if needed.)
+          # Build BOTH localnet-tools binaries in one invocation:
+          #   - walrus-localnet-deploy : publishes nodeless Walrus on the localnet
+          #   - sb-local               : the Walrus aggregator/publisher HTTP server
           cd "$crate_dir"
-          cargo build --release --features localnet --bin walrus-localnet-deploy
+          cargo build --release --features localnet --bin walrus-localnet-deploy --bin sb-local
 
-          # Stage the binary where Suibase's downloader expects it (install_type=user
-          # -> workdirs/common/bin), matching consts.yaml precompiled_path.
-          mkdir -p "$HOME/suibase/workdirs/common/bin"
-          cp "$crate_dir/target/release/walrus-localnet-deploy" "$HOME/suibase/workdirs/common/bin/walrus-localnet-deploy"
+          # Stage both where Suibase's downloader expects them (install_type=user ->
+          # workdirs/common/bin; the consumer copies every name in localnet_tools_bin_names).
+          bindir="$HOME/suibase/workdirs/common/bin"
+          mkdir -p "$bindir"
+          cp "$crate_dir/target/release/walrus-localnet-deploy" "$bindir/walrus-localnet-deploy"
+          cp "$crate_dir/target/release/sb-local" "$bindir/sb-local"
 
-          # The binary has no --version flag (support_version_check=false on the
-          # consume side), so there is no version sanity gate here. Smoke-test that
-          # it at least runs its --help.
-          "$HOME/suibase/workdirs/common/bin/walrus-localnet-deploy" deploy --help >/dev/null
+          # Neither binary has a --version flag (support_version_check=false on the
+          # consumer side), so there is no version sanity gate here. Smoke-test that
+          # each at least runs its --help (a broken binary fails the build).
+          "$bindir/walrus-localnet-deploy" deploy --help >/dev/null
+          "$bindir/sb-local" --help >/dev/null
 
           cd "$HOME"
-          tar -czf "$asset_name" -C "$HOME" suibase/workdirs/common/bin/walrus-localnet-deploy
+          tar -czf "$asset_name" -C "$HOME" \
+            suibase/workdirs/common/bin/walrus-localnet-deploy \
+            suibase/workdirs/common/bin/sb-local
           test -f "$HOME/$asset_name"
-          echo "Asset built: $asset_name"
+          echo "Asset built: $asset_name (walrus-localnet-deploy + sb-local)"
 
       - name: Upload Asset to Release
         if: steps.asset_vars.outputs.do_build == 'true'
