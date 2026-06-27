@@ -12,16 +12,18 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Diagnostics MUST go to stderr so they never pollute stdout, which callers
+# (build-seal.sh, build-seal.yml) capture as the version string.
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 # Get latest SEAL version from GitHub API
@@ -29,12 +31,21 @@ get_latest_seal_version() {
     local version="${SEAL_VERSION:-latest}"
 
     if [[ "$version" == "latest" ]]; then
+        # Build curl args. Authenticate when a token is available to lift the
+        # anonymous 60-req/hr rate limit (5000/hr authenticated) that shared
+        # CI runner IPs routinely hit, and retry transient failures.
+        local -a curl_args=(-sS --retry 3 --retry-delay 2 --fail)
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            curl_args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+        fi
+        curl_args+=("https://api.github.com/repos/MystenLabs/seal/releases")
+
         # Fetch all releases and filter for stable releases only
         # Filter out prerelease versions AND versions with suffixes like -candidate, -alpha, -beta, -rc
-        local latest_tag=$(curl -s https://api.github.com/repos/MystenLabs/seal/releases | \
+        local latest_tag=$(curl "${curl_args[@]}" | \
             jq -r '.[] | select(.prerelease == false) | .tag_name' | \
             grep -E '^seal-v[0-9]+\.[0-9]+\.[0-9]+$' | \
-            head -n 1)
+            head -n 1) || true
 
         if [[ -z "$latest_tag" ]]; then
             log_error "Failed to fetch latest stable version from GitHub API"
@@ -58,7 +69,10 @@ get_latest_seal_version() {
 
 # Main execution - output the version
 main() {
-    local version=$(get_latest_seal_version)
+    # Declare first, then assign, so the subshell's non-zero exit propagates
+    # instead of being masked by `local` (which always returns 0).
+    local version
+    version=$(get_latest_seal_version) || exit 1
     echo "$version"
 }
 

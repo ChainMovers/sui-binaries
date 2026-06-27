@@ -28,11 +28,21 @@ jobs:
       - name: Check SEAL version and existing releases
         id: version_check
         uses: actions/github-script@v9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
             // Get latest SEAL version using our script
             const { execSync } = require('child_process');
             const version = execSync('./scripts/get-latest-seal-version.sh').toString().trim();
+
+            // Defense-in-depth: never let a non-version string (e.g. an error
+            // message) flow into a tag name. Must be a bare X.Y.Z.
+            if (!/^\d+\.\d+\.\d+$/.test(version)) {
+              core.setFailed(`get-latest-seal-version.sh returned an invalid version: "${version}"`);
+              return;
+            }
+
             const tag_name = `${{ env.asset_name }}-v${version}`;
 
             console.log(`Latest SEAL version: ${version}`);
