@@ -32,10 +32,18 @@ on:
         description: "Optional X.Y.Z to mirror a specific version (default: latest upstream)"
 
 env:
-  # Official MystenLabs platforms. We mirror all of them so Suibase can source
-  # every supported target from this repo. Processing is identical per platform
-  # (untar/strip/retar), so everything runs on ubuntu regardless of target.
-  PLATFORMS: "ubuntu-x86_64 ubuntu-aarch64 macos-arm64 macos-x86_64 windows-x86_64"
+  # Platforms we mirror so Suibase can source every supported target from this
+  # repo. Processing is identical per platform (untar/strip/retar), so everything
+  # runs on ubuntu regardless of target.
+  #
+  # This list is intentionally hard-coded. If an upstream release stops shipping
+  # one of these, the download in build-assets 404s and the run fails loudly —
+  # which is what we want: a change in supported platforms should surface as an
+  # error a maintainer notices, not silently mirror fewer targets.
+  #
+  # macos-x86_64 (Intel Mac) is deliberately absent: Suibase dropped Intel Mac
+  # support, and MystenLabs stopped publishing it for testnet at v1.74.1.
+  PLATFORMS: "ubuntu-x86_64 ubuntu-aarch64 macos-arm64 windows-x86_64"
 
 jobs:
   check-version:
@@ -118,7 +126,6 @@ jobs:
           - ubuntu-x86_64
           - ubuntu-aarch64
           - macos-arm64
-          - macos-x86_64
           - windows-x86_64
     steps:
       - uses: actions/checkout@v6
